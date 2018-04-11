@@ -1,0 +1,12 @@
+#Editorconfig is awesome: http://EditorConfig.org
+
+#Top most editor file.
+root = true
+
+[*]
+charset = utf-8
+trim_trailing_whitespace = true
+
+[*.{js, json, yaml, erb.*}]
+indent_style = space
+indent_size = 4
