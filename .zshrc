@@ -67,6 +67,7 @@ plugins=(
   nvm
   shrink-path
   zsh-autosuggestions
+  kube-ps1
 )
 
 source $ZSH/oh-my-zsh.sh
@@ -100,19 +101,56 @@ source $ZSH/oh-my-zsh.sh
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias kc=kubectl
-alias kcm="kubectl -n apic-management"
-alias kcp="kubectl -n apic-portal"
-alias kca="kubectl -n apic-analytics"
 
-export PATH="~/.pyenv:$PATH"
-eval "$(pyenv init -)"
-export GHE_TOKEN=REPLACE_ME
-export VELOX=~/projects/velox
 export GOPATH=~/.go
 export PATH=$PATH:${GOPATH//://bin:}/bin
 
 bindkey "^[^[[D" backward-word
 bindkey "^[^[[C" forward-word
 
-### Added by IBM Cloud CLI
-source /usr/local/Bluemix/bx/zsh_autocomplete
+# Reduce prompt latency by fetching git status asynchronously.
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd .prompt.git-status.async
+zle -N .prompt.git-status.callback
+.prompt.git-status.async() {
+  local fd
+  exec {fd}< <( .prompt.git-status )
+  zle -Fw "$fd" .prompt.git-status.callback
+}
+.prompt.git-status.callback() {
+  local fd=$1 REPLY
+  {
+    zle -F "$fd"  # Unhook this callback.
+    [[ $2 != (|hup) ]] &&
+        return  # Error occured.
+    read -ru $fd
+    .prompt.git-status.update "$REPLY"
+  } always {
+    exec {fd}<&-  # Close file descriptor.
+  }
+}
+
+# Periodically sync git status in prompt.
+TMOUT=2  # Update interval in seconds
+trap .prompt.git-status.update ALRM
+.prompt.git-status.update() {
+  local rps1=${1-$( .prompt.git-status )}
+  [[ $rps1 == $RPS1 ]] &&
+      return 1
+  RPS1=$rps1
+  zle .reset-prompt
+}
+
+.prompt.git-status() {
+  local MATCH MBEGIN MEND
+  local -a lines
+  if ! lines=( ${(f)"$( git status -sbu 2> /dev/null )"} ); then
+    print
+    return
+  fi
+  local -aU symbols=( ${(@MSu)lines[2,-1]##[^[:blank:]]##} )
+  print -r -- "${${lines[1]/'##'/$symbols}//(#m)$'\C-[['[;[:digit:]]#m/%{${MATCH}%\}}"
+}
+
+# Set up prompt
+PROMPT='$(kube_ps1)'$PROMPT
